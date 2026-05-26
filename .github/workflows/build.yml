@@ -2,6 +2,11 @@ name: Build
 on:
   pull_request:
   push:
+    branches:
+      - main-xx4h
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/${{ github.repository }}
@@ -24,27 +29,14 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: |
-          if ! command -v attic &> /dev/null; then
-            ./.github/install-attic-ci.sh
-          fi
-
-      - name: Configure Attic
-        continue-on-error: true
-        run: |
-          : "${ATTIC_SERVER:=https://staging.attic.rs/}"
-          : "${ATTIC_CACHE:=attic-ci}"
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login --set-default ci "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-          if [ -n "$ATTIC_TOKEN" ]; then
-            echo ATTIC_CACHE=$ATTIC_CACHE >>$GITHUB_ENV
-          fi
-        env:
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 5G
+          gc-max-store-size-macos: 5G
+          save: true
 
       - name: Cache dev shell
         run: |
@@ -52,19 +44,12 @@ jobs:
           system=$(nix-instantiate --eval -E 'builtins.currentSystem')
           echo system=$system >>$GITHUB_ENV
 
-      # TODO: Abstract all of this out, and use `attic push --stdin` (requires #232)
       - name: Build packages
         run: |
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
           nix build --no-link --print-out-paths -L \
             .#attic \
             .#attic-client \
-            .#attic-server \
-          | if [ -n "$ATTIC_CACHE" ]; then
-            xargs attic push "ci:$ATTIC_CACHE"
-          else
-            cat
-          fi
+            .#attic-server
 
   tests:
     strategy:
@@ -89,27 +74,12 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: |
-          if ! command -v attic &> /dev/null; then
-            ./.github/install-attic-ci.sh
-          fi
-
-      - name: Configure Attic
-        continue-on-error: true
-        run: |
-          : "${ATTIC_SERVER:=https://staging.attic.rs/}"
-          : "${ATTIC_CACHE:=attic-ci}"
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login --set-default ci "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-          if [ -n "$ATTIC_TOKEN" ]; then
-            echo ATTIC_CACHE=$ATTIC_CACHE >>$GITHUB_ENV
-          fi
-        env:
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
 
       - name: Cache dev shell
         run: |
@@ -126,17 +96,6 @@ jobs:
         run: |
           .ci/run just ci-build-wasm
 
-      # TODO: Just take a diff of the list of store paths, also abstract all of this out
-      - name: Push build artifacts
-        run: |
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          if [ -n "$ATTIC_CACHE" ]; then
-            nix build --no-link --print-out-paths -L \
-              .#internalMatrix."$system".\"${{ matrix.nix }}\".attic-tests \
-              .#internalMatrix."$system".\"${{ matrix.nix }}\".cargoArtifacts \
-            | xargs attic push "ci:$ATTIC_CACHE"
-          fi
-
   nix-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -146,27 +105,6 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: |
-          if ! command -v attic &> /dev/null; then
-            ./.github/install-attic-ci.sh
-          fi
-
-      - name: Configure Attic
-        continue-on-error: true
-        run: |
-          : "${ATTIC_SERVER:=https://staging.attic.rs/}"
-          : "${ATTIC_CACHE:=attic-ci}"
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login --set-default ci "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-          if [ -n "$ATTIC_TOKEN" ]; then
-            echo ATTIC_CACHE=$ATTIC_CACHE >>$GITHUB_ENV
-          fi
-        env:
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
       - id: set-matrix
         name: Generate Nix Matrix
         run: |
@@ -193,36 +131,16 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: |
-          if ! command -v attic &> /dev/null; then
-            ./.github/install-attic-ci.sh
-          fi
-
-      - name: Configure Attic
-        continue-on-error: true
-        run: |
-          : "${ATTIC_SERVER:=https://staging.attic.rs/}"
-          : "${ATTIC_CACHE:=attic-ci}"
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login --set-default ci "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-          if [ -n "$ATTIC_TOKEN" ]; then
-            echo ATTIC_CACHE=$ATTIC_CACHE >>$GITHUB_ENV
-          fi
-        env:
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
 
       - name: Build ${{ matrix.attr }}
         run: |
-          nix build --no-link --print-out-paths -L '.#${{ matrix.attr }}' \
-          | if [ -n "$ATTIC_CACHE" ]; then
-            xargs attic push "ci:$ATTIC_CACHE"
-          else
-            cat
-          fi
+          nix build --no-link --print-out-paths -L '.#${{ matrix.attr }}'
 
   image:
     runs-on: ubuntu-latest
@@ -244,27 +162,12 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: |
-          if ! command -v attic &> /dev/null; then
-            ./.github/install-attic-ci.sh
-          fi
-
-      - name: Configure Attic
-        continue-on-error: true
-        run: |
-          : "${ATTIC_SERVER:=https://staging.attic.rs/}"
-          : "${ATTIC_CACHE:=attic-ci}"
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login --set-default ci "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-          if [ -n "$ATTIC_TOKEN" ]; then
-            echo ATTIC_CACHE=$ATTIC_CACHE >>$GITHUB_ENV
-          fi
-        env:
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
 
       - name: Cache dev shell
         run: |
@@ -300,14 +203,3 @@ jobs:
           >&2 echo "Tags: ${tags[@]}"
 
           .ci/run just ci-build-and-push-images "${IMAGE_NAME}" "${tags[@]}"
-
-      # TODO: Just take a diff of the list of store paths, also abstract all of this out
-      - name: Push build artifacts
-        run: |
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          if [ -n "$ATTIC_CACHE" ]; then
-            nix build --no-link --print-out-paths -L \
-              .#attic-server-image \
-              .#attic-server-image-aarch64 \
-            | xargs attic push "ci:$ATTIC_CACHE"
-          fi

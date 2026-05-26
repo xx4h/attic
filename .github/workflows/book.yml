@@ -23,16 +23,12 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v18
         continue-on-error: true # Self-hosted runners already have Nix installed
 
-      - name: Install Attic
-        run: ./.github/install-attic-ci.sh
-
-      - name: Configure Attic
-        run: |
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          attic login staging https://staging.attic.rs/ "$ATTIC_TOKEN"
-          attic use attic-ci
-        env:
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
 
       - name: Build book
         run: nix build .#book -L
@@ -48,14 +44,3 @@ jobs:
 
       - name: Deploy book
         uses: actions/deploy-pages@v4.0.5
-
-      # TODO: Just take a diff of the list of store paths, also abstract all of this out
-      - name: Push build artifacts
-        run: |
-          export PATH=$HOME/.nix-profile/bin:$PATH # FIXME
-          if [ -n "$ATTIC_TOKEN" ]; then
-            nix build .#book --no-link --print-out-paths -L | \
-              xargs attic push attic-ci
-          fi
-        env:
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}

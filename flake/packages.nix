@@ -86,10 +86,6 @@ in
           attic-client-static = cranePkgsStatic.attic-client;
           attic-server-static = cranePkgsStatic.attic-server;
 
-          attic-ci-installer = pkgs.callPackage ../ci-installer.nix {
-            inherit self;
-          };
-
           book = pkgs.callPackage ../book {
             attic = self'.packages.attic;
           };
