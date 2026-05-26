@@ -82,6 +82,17 @@ path = "%storage_path%"
 #  access_key_id = ""
 #  secret_access_key = ""
 
+# Stream downloads through atticd instead of redirecting to presigned URLs
+#
+# By default, atticd serves single-object NAR downloads by issuing an
+# HTTP redirect to a time-limited presigned URL — the client fetches
+# bytes directly from S3. Set this to true when the S3 endpoint is not
+# reachable from clients (e.g., internal MinIO behind a firewall), or
+# to apply bandwidth/audit controls at the atticd layer.
+#
+# Multi-chunk NAR reassembly always streams through atticd regardless.
+#prefer-stream = false
+
 # Data chunking
 #
 # Warning: If you change any of the values here, it will be
