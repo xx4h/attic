@@ -42,7 +42,7 @@ let
       '';
     };
     postgres = {
-      server = {
+      server = { config, ... }: {
         services.postgresql = {
           enable = true;
           ensureDatabases = [ "attic" ];
@@ -61,9 +61,26 @@ let
           ];
         };
 
-        systemd.services.postgresql-setup.postStart = lib.mkAfter ''
-          psql -tAc 'ALTER DATABASE "attic" OWNER TO "atticd"'
-        '';
+        # Works against both nixos-25.05 (setup lives in `postgresql.postStart`)
+        # and nixos-unstable (setup moved to `postgresql-setup.service`).
+        systemd.services.atticd-db-setup = {
+          description = "Grant atticd permissions on the attic database";
+          wantedBy = [ "atticd.service" ];
+          before = [ "atticd.service" ];
+          after = [ "postgresql.service" "postgresql-setup.service" ];
+          requires = [ "postgresql.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "postgres";
+            Group = "postgres";
+            RemainAfterExit = true;
+          };
+          path = [ config.services.postgresql.finalPackage ];
+          script = ''
+            psql -tAc 'ALTER DATABASE "attic" OWNER TO "atticd"'
+            psql -d attic -tAc 'GRANT CREATE ON SCHEMA public TO "atticd"'
+          '';
+        };
 
         services.atticd.settings = {
           database.url = "postgresql:///attic?host=/run/postgresql";
