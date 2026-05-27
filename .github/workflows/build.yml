@@ -27,7 +27,6 @@ jobs:
           command -v brew && brew install bash || true
 
       - uses: DeterminateSystems/nix-installer-action@v18
-        continue-on-error: true # Self-hosted runners already have Nix installed
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
@@ -72,7 +71,6 @@ jobs:
           command -v brew && brew install bash || true
 
       - uses: DeterminateSystems/nix-installer-action@v18
-        continue-on-error: true # Self-hosted runners already have Nix installed
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
@@ -103,7 +101,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.7
       - uses: DeterminateSystems/nix-installer-action@v18
-        continue-on-error: true # Self-hosted runners already have Nix installed
 
       - id: set-matrix
         name: Generate Nix Matrix
@@ -129,7 +126,6 @@ jobs:
           command -v brew && brew install bash || true
 
       - uses: DeterminateSystems/nix-installer-action@v18
-        continue-on-error: true # Self-hosted runners already have Nix installed
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
@@ -160,7 +156,6 @@ jobs:
           command -v brew && brew install bash || true
 
       - uses: DeterminateSystems/nix-installer-action@v18
-        continue-on-error: true # Self-hosted runners already have Nix installed
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
