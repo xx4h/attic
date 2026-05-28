@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main-xx4h
+    tags:
+      - '*'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -140,10 +142,12 @@ jobs:
 
   image:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     needs:
       - build
       - tests
+    # Manual approval gate only for pull_request; pushes to the default
+    # branch and tag pushes build automatically (empty environment = none).
+    environment: ${{ github.event_name == 'pull_request' && 'image-build' || '' }}
     permissions:
       contents: read
       packages: write
